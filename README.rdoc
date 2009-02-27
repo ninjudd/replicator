@@ -8,23 +8,32 @@ another using auto-generated triggers. Just add simple directives in your migrat
   ActiveRecord::Migration.extend(Replicate)
 
   class AddReplication < ActiveRecord::Migration
-    replicate :names,
-      :to         => :profiles,
-      :fields     => [:first_name, :last_name],
-      :using      => 'NEW.id'
+    def self.up
+      replicate :names,
+        :to     => :profiles,
+        :fields => [:first, :last],
+        :using  => 'NEW.id',
+        :prefix => 'name'
 
-    replicate :events,
-      :to         => :profiles,
-      :fields     => {:start_year => :year},
-      :using      => 'NEW.profile_id',
-      :prefix     => 'NEW.type'
+      replicate :events,
+        :to       => :profiles,
+        :fields   => {:start_year => :year},
+        :using    => 'NEW.profile_id',
+        :prefix   => 'NEW.type',
+        :prefixes => prefix_map
 
-    replicate :locations,
-      :to         => :profiles,
-      :fields     => [:latitude, :longitude, {[:city, :state, :country] => :location}],
-      :through    => 'SELECT * FROM events WHERE address_id = NEW.id',
-      :using      => 'THROUGH.owner_id',
-      :prefix     => 'THROUGH.type',
+      replicate :locations,
+        :to       => :profiles,
+        :fields   => [:latitude, :longitude, {[:city, :state, :country] => :location}],
+        :through  => 'SELECT * FROM events WHERE address_id = NEW.id',
+        :using    => 'THROUGH.owner_id',
+        :prefix   => 'THROUGH.type',
+        :prefixes => prefix_map
+    end
+  
+    def self.prefix_map
+      {'BirthEvent' => 'birth', 'GraduationEvent' => 'grad'}
+    end
   end
  
 There are a lot of options. The code is pretty self explanatory, but I can document it more on request.
