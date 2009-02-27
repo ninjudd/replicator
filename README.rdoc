@@ -10,33 +10,34 @@ another using auto-generated triggers. Just add simple directives in your migrat
   class AddReplication < ActiveRecord::Migration
     def self.up
       replicate :names,
-        :to     => :profiles,
-        :fields => [:first, :last],
-        :using  => 'NEW.id',
-        :prefix => 'name'
+        :to     => :users,
+        :fields => [:first_name, :last_name]
+
+      replicate :data,
+        :to     => :users,
+        :fields => [:eye_color, :height]
+        :key    => 'user_id',
+        :prefix => 'data'
 
       replicate :events,
-        :to       => :profiles,
-        :fields   => {:start_year => :year},
-        :using    => 'NEW.profile_id',
-        :prefix   => 'NEW.type',
-        :prefixes => prefix_map
+        :to         => :users,
+        :fields     => {:start_year => :year},
+        :key        => 'user_id',
+        :prefix     => 'NEW.type',
+        :prefix_map => {'BirthEvent' => 'birth', 'GraduationEvent' => 'grad'}
 
       replicate :locations,
-        :to       => :profiles,
+        :to       => :users,
         :fields   => [:latitude, :longitude, {[:city, :state, :country] => :location}],
         :through  => 'SELECT * FROM events WHERE address_id = NEW.id',
-        :using    => 'THROUGH.owner_id',
+        :key      => 'user_id',
         :prefix   => 'THROUGH.type',
-        :prefixes => prefix_map
-    end
-  
-    def self.prefix_map
-      {'BirthEvent' => 'birth', 'GraduationEvent' => 'grad'}
+        :prefixes => {'BirthEvent' => 'birth', 'GraduationEvent' => 'grad'}
     end
   end
  
-There are a lot of options. The code is pretty self explanatory, but I can document it more on request.
+There are a lot of options. The code is mostly self explanatory, but I will document it
+more on request or when I get some more time.
 
 == Install:
 

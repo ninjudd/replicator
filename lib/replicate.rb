@@ -16,15 +16,15 @@ module Replicate
   end
 
   class Trigger
-    attr_reader :from, :to, :fields, :prefix, :prefixes, :using, :through
+    attr_reader :from, :to, :fields, :key, :through, :prefix, :prefix_map
 
     def initialize(table, opts)
       @from       = table
       @to         = opts[:to]
-      @prefix     = opts[:prefix]
-      @prefixes   = opts[:prefixes]
-      @using      = opts[:using]
+      @key        = opts[:key] || 'id'
       @through    = opts[:through]
+      @prefix     = opts[:prefix]
+      @prefix_map = opts[:prefix_map]
       @timestamps = opts[:timestamps]
 
       @fields = {}
@@ -49,7 +49,7 @@ module Replicate
               NEW.type := OLD.type;
             END IF;
             #{loop_sql}
-              IF COUNT(*) = 0 FROM #{to} WHERE id = #{using} THEN
+              IF COUNT(*) = 0 FROM #{to} WHERE id = #{primary_key} THEN
                 #{insert_sql}
               END IF;            
               #{update_all_sql(:indent => 14)}
@@ -72,8 +72,12 @@ module Replicate
 
   private
 
+    def primary_key
+      "#{through ? 'THROUGH' : 'NEW'}.#{key}"
+    end
+
     def function_name
-      hash = Digest::MD5.hexdigest("#{fields.join(',')}:#{through}:#{using}:#{prefix}:#{prefixes}")[0,10]
+      hash = Digest::MD5.hexdigest(self.inspect)[0,10]
       "replicate_#{from}_to_#{to}_#{hash}"
     end
 
@@ -87,9 +91,9 @@ module Replicate
 
     def insert_sql
       if timestamps?
-        "INSERT INTO #{to} (id, created_on) VALUES (#{using}, NOW());"
+        "INSERT INTO #{to} (id, created_on) VALUES (#{primary_key}, NOW());"
       else
-        "INSERT INTO #{to} (id) VALUES (#{using});"
+        "INSERT INTO #{to} (id) VALUES (#{primary_key});"
       end
     end
       
@@ -100,17 +104,17 @@ module Replicate
         "#{prefix}#{to_field} = #{from_field}"
       end
       updates << "updated_on = NOW()" if timestamps?
-      "UPDATE #{to} SET #{updates.join(', ')} WHERE #{to}.id = #{using};"
+      "UPDATE #{to} SET #{updates.join(', ')} WHERE #{to}.id = #{primary_key};"
     end
 
     def update_all_sql(opts = {})
-      return update_sql(:prefix => prefix) unless prefixes
+      return update_sql(:prefix => prefix) unless prefix_map
 
       sql = ''
       opts[:indent] ||= 0
       newline = "\n#{' ' * opts[:indent]}"
       cond = 'IF'
-      prefixes.each do |value, mapping|
+      prefix_map.each do |value, mapping|
         sql << "#{cond} #{prefix} = '#{value}' THEN" + newline
         sql << "  #{update_sql(:prefix => mapping)}" + newline 
         cond = 'ELSIF'
