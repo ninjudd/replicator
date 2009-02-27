@@ -27,7 +27,7 @@ another using auto-generated triggers. Just add simple directives in your migrat
       :prefix     => 'THROUGH.type',
   end
  
-There are a lot of options, the code is pretty self explanatory, but I can document them more on request.
+There are a lot of options. The code is pretty self explanatory, but I can document it more on request.
 
 == Install:
 
