@@ -1,4 +1,4 @@
-= Replicaate
+= Replicate
 
 Simple Postgres replication for Rails. Replicates specific columns from one table to
 another using auto-generated triggers. Just add simple directives in your migrations.
