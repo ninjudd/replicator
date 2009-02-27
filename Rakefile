@@ -6,10 +6,10 @@ begin
   require 'jeweler'
   Jeweler::Tasks.new do |s|
     s.name = "replicate"
-    s.summary = %Q{TODO}
-    s.email = "justin@geni.com"
+    s.summary = %Q{Simple Postgres replication for Rails. Replicates specific columns from one table to another using auto-generated triggers.}
+    s.email = "code@justinbalthrop.com"
     s.homepage = "http://github.com/ninjudd/replicate"
-    s.description = "TODO"
+    s.description = "Simple Postgres replication for Rails"
     s.authors = ["Justin Balthrop"]
   end
 rescue LoadError
