@@ -50,13 +50,15 @@ module Replicate
               ROW := NEW;
             END IF;
             #{loop_sql}
-              IF COUNT(*) = 0 FROM #{to} WHERE id = #{primary_key} THEN
-                #{insert_sql}
-              END IF;
-              IF (TG_OP = 'DELETE') THEN
-                #{update_all_sql(:indent => 16, :clear => true)}
-              ELSE
-                #{update_all_sql(:indent => 16)}
+              IF #{primary_key} IS NOT NULL THEN
+                IF COUNT(*) = 0 FROM #{to} WHERE id = #{primary_key} THEN
+                  #{insert_sql}
+                END IF;
+                IF (TG_OP = 'DELETE') THEN
+                  #{update_all_sql(:indent => 18, :clear => true)}
+                ELSE
+                  #{update_all_sql(:indent => 18)}
+                END IF;
               END IF;
             #{end_loop_sql}
             RETURN NULL;
@@ -78,7 +80,7 @@ module Replicate
   private
 
     def primary_key
-      "#{through ? 'THROUGH' : 'ROW'}.#{key}"
+      @primary_key ||= "#{through ? 'THROUGH' : 'ROW'}.#{key}"
     end
 
     def name
