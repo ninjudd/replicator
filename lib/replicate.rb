@@ -1,5 +1,3 @@
-require "digest/md5"
-
 module Replicate
   def replicate(table, opts)
     action = opts.delete(:action) || :create
@@ -21,6 +19,7 @@ module Replicate
     def initialize(table, opts)
       @from       = table
       @to         = opts[:to]
+      @name       = opts[:name]
       @key        = opts[:key] || 'id'
       @through    = opts[:through]
       @prefix     = opts[:prefix]
@@ -40,30 +39,36 @@ module Replicate
 
     def create_sql
       %{
-        CREATE OR REPLACE FUNCTION #{function_name}() RETURNS TRIGGER AS $$
+        CREATE OR REPLACE FUNCTION #{name}() RETURNS TRIGGER AS $$
           DECLARE
+            ROW     RECORD;
             THROUGH RECORD;
           BEGIN
             IF (TG_OP = 'DELETE') THEN
-              NEW.id   := OLD.id;
-              NEW.type := OLD.type;
+              ROW := OLD;
+            ELSE
+              ROW := NEW;
             END IF;
             #{loop_sql}
               IF COUNT(*) = 0 FROM #{to} WHERE id = #{primary_key} THEN
                 #{insert_sql}
-              END IF;            
-              #{update_all_sql(:indent => 14)}
+              END IF;
+              IF (TG_OP = 'DELETE') THEN
+                #{update_all_sql(:indent => 16, :clear => true)}
+              ELSE
+                #{update_all_sql(:indent => 16)}
+              END IF;
             #{end_loop_sql}
-            RETURN NEW;
+            RETURN NULL;
           END;
         $$ LANGUAGE plpgsql;
-        CREATE TRIGGER #{function_name} BEFORE INSERT OR UPDATE OR DELETE ON #{from}
-          FOR EACH ROW EXECUTE PROCEDURE #{function_name}();
+        CREATE TRIGGER #{name} AFTER INSERT OR UPDATE OR DELETE ON #{from}
+          FOR EACH ROW EXECUTE PROCEDURE #{name}();
       }
     end
 
     def drop_sql
-      "DROP FUNCTION #{function_name}() CASCADE"
+      "DROP FUNCTION IF EXISTS #{name}() CASCADE"
     end
 
     def timestamps?
@@ -73,12 +78,11 @@ module Replicate
   private
 
     def primary_key
-      "#{through ? 'THROUGH' : 'NEW'}.#{key}"
+      "#{through ? 'THROUGH' : 'ROW'}.#{key}"
     end
 
-    def function_name
-      hash = Digest::MD5.hexdigest(self.inspect)[0,10]
-      "replicate_#{from}_to_#{to}_#{hash}"
+    def name
+      @name ||= "replicate_#{from}_to_#{to}"
     end
 
     def loop_sql
@@ -91,7 +95,7 @@ module Replicate
 
     def insert_sql
       if timestamps?
-        "INSERT INTO #{to} (id, created_on) VALUES (#{primary_key}, NOW());"
+        "INSERT INTO #{to} (id, created_at) VALUES (#{primary_key}, NOW());"
       else
         "INSERT INTO #{to} (id) VALUES (#{primary_key});"
       end
@@ -100,23 +104,23 @@ module Replicate
     def update_sql(opts = {})
       prefix = opts[:prefix] + '_' if opts[:prefix]
       updates = fields.collect do |from_field, to_field|
-        from_field = Array(from_field).collect {|f| "NEW.#{f}"}.join(" || ' ' || ") 
+        from_field = opts[:clear] ? 'NULL' : Array(from_field).collect {|f| "ROW.#{f}"}.join(" || ' ' || ") 
         "#{prefix}#{to_field} = #{from_field}"
       end
-      updates << "updated_on = NOW()" if timestamps?
+      updates << "updated_at = NOW()" if timestamps?
       "UPDATE #{to} SET #{updates.join(', ')} WHERE #{to}.id = #{primary_key};"
     end
 
     def update_all_sql(opts = {})
-      return update_sql(:prefix => prefix) unless prefix_map
+      return update_sql(opts.merge(:prefix => prefix)) unless prefix_map
 
       sql = ''
       opts[:indent] ||= 0
       newline = "\n#{' ' * opts[:indent]}"
       cond = 'IF'
-      prefix_map.each do |value, mapping|
-        sql << "#{cond} #{prefix} = '#{value}' THEN" + newline
-        sql << "  #{update_sql(:prefix => mapping)}" + newline 
+      prefix_map.each do |prefix_value, mapping|
+        sql << "#{cond} #{prefix} = '#{prefix_value}' THEN" + newline
+        sql << "  #{update_sql(opts.merge(:prefix => mapping))}" + newline 
         cond = 'ELSIF'
       end
       sql << "END IF;"
