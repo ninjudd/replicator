@@ -14,7 +14,7 @@ module Replicate
   end
 
   class Trigger
-    attr_reader :from, :to, :fields, :key, :through, :prefix, :prefix_map
+    attr_reader :from, :to, :fields, :key, :through, :condition, :prefix, :prefix_map
 
     def initialize(table, opts)
       @from       = table
@@ -22,9 +22,18 @@ module Replicate
       @name       = opts[:name]
       @key        = opts[:key] || 'id'
       @through    = opts[:through]
+      @condition  = opts[:condition] || opts[:if]
       @prefix     = opts[:prefix]
       @prefix_map = opts[:prefix_map]
       @timestamps = opts[:timestamps]
+
+      # Use opts[:prefixes] to specify valid prefixes and use the identity mapping.
+      if @prefix_map.nil? and opts[:prefixes]
+        @prefix_map = {}
+        opts[:prefixes].each do |prefix|
+          @prefix_map[prefix] = prefix
+        end
+      end
 
       @fields = {}
       opts[:fields] = [opts[:fields]] unless opts[:fields].kind_of?(Array)
@@ -50,7 +59,7 @@ module Replicate
               ROW := NEW;
             END IF;
             #{loop_sql}
-              IF #{primary_key} IS NOT NULL THEN
+              IF #{conditions_sql} THEN
                 IF COUNT(*) = 0 FROM #{to} WHERE id = #{primary_key} THEN
                   #{insert_sql}
                 END IF;
@@ -95,6 +104,13 @@ module Replicate
       "END LOOP;" if through
     end
 
+    def conditions_sql
+      conditions = []
+      conditions << "#{primary_key} IS NOT NULL"
+      conditions << condition if condition
+      conditions.join(' AND ')
+    end
+
     def insert_sql
       if timestamps?
         "INSERT INTO #{to} (id, created_at) VALUES (#{primary_key}, NOW());"
@@ -104,10 +120,10 @@ module Replicate
     end
       
     def update_sql(opts = {})
-      prefix = opts[:prefix] + '_' if opts[:prefix]
       updates = fields.collect do |from_field, to_field|
         from_field = opts[:clear] ? 'NULL' : Array(from_field).collect {|f| "ROW.#{f}"}.join(" || ' ' || ") 
-        "#{prefix}#{to_field} = #{from_field}"
+        field = [opts[:prefix], to_field].compact.join('_')
+        "#{field} = #{from_field}"
       end
       updates << "updated_at = NOW()" if timestamps?
       "UPDATE #{to} SET #{updates.join(', ')} WHERE #{to}.id = #{primary_key};"
