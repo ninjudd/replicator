@@ -107,8 +107,13 @@ module Replicate
     def conditions_sql
       conditions = []
       conditions << "#{primary_key} IS NOT NULL"
+      conditions << "#{prefix} IN (#{prefixes_sql})" if prefix_map 
       conditions << condition if condition
       conditions.join(' AND ')
+    end
+
+    def prefixes_sql
+      prefix_map.keys.collect {|p| "'#{p}'"}.join(',')
     end
 
     def insert_sql
