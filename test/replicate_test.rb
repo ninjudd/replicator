@@ -5,9 +5,9 @@ class ReplicateTest < Test::Unit::TestCase
     t = Replicate::Trigger.new :locations,
       :to         => :users,
       :fields     => [:latitude, :longitude, {[:city, :state, :country] => :location}],
-      :through    => 'SELECT * FROM events WHERE address_id = ROW.id',
+      :through    => 'events.address_id',
       :key        => 'user_id',
-      :prefix     => 'THROUGH.type',
+      :prefix     => 'events.type',
       :prefix_map => {'BirthEvent' => 'birth', 'GraduationEvent' => 'grad'}
 
     sql = t.create_sql

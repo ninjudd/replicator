@@ -23,15 +23,15 @@ another using auto-generated triggers. Just add simple directives in your migrat
         :to         => :users,
         :fields     => {:start_year => :year},
         :key        => 'user_id',
-        :prefix     => 'ROW.type',
+        :prefix     => 'type',
         :prefix_map => {'BirthEvent' => 'birth', 'GraduationEvent' => 'grad'}
 
       replicate :locations,
         :to         => :users,
         :fields     => [:latitude, :longitude, {[:city, :state, :country] => :location}],
-        :through    => 'SELECT * FROM events WHERE address_id = ROW.id',
+        :through    => 'events.address_id',
         :key        => 'user_id',
-        :prefix     => 'THROUGH.type',
+        :prefix     => 'events.type',
         :prefix_map => {'BirthEvent' => 'birth', 'GraduationEvent' => 'grad'}
     end
   end
