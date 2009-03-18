@@ -101,7 +101,11 @@ module Replicate
     end
 
     def initialize_sql
-      "SELECT id INTO TABLE #{to} FROM #{from}"
+      if timestamps?
+        "INSERT INTO #{to} (id, created_at) SELECT #{key}, NOW() FROM #{from};"
+      else
+        "INSERT INTO #{to} (id) SELECT #{key} FROM #{from};"
+      end
     end
 
     def populate_sql(mode = nil)
