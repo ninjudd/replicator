@@ -8,19 +8,52 @@ module Replicate
       execute(trigger.create_sql)
     when :drop
       execute(trigger.drop_sql)
-    when :initialize
-      execute(trigger.initialize_sql)
-    when :populate
-      trigger.populate_sql.each do |sql|
+    when :initialize     
+      sql_by_slice = trigger.initialize_sql
+      sql_by_slice.each do |slice, sql|
+        execute("DROP TABLE IF EXISTS #{slice[:name]}")
         execute(sql)
       end
+      replicated_table_slices(trigger.to).concat(sql_by_slice.keys)
     else
       raise "invalid action: #{action}"
     end
   end
 
+  def create_replicated_table(table_name)
+    fields     = []
+    tables     = []
+    conditions = []
+
+    replicated_table_slices(table_name).each do |slice|
+      if tables.empty?
+        fields << "#{slice[:name]}.id"
+      else
+        conditions << "#{tables.first}.id = #{slice[:name]}.id"
+      end
+      fields << slice[:fields].collect {|f| "#{slice[:name]}.#{f}"}
+      tables << slice[:name]
+    end
+
+    execute %{
+      CREATE TABLE #{table_name} AS
+        SELECT #{fields.flatten.join(', ')} FROM #{tables.join(', ')}
+         WHERE #{conditions.join(' AND ')}
+    }
+
+    tables.each {|name| execute("DROP TABLE #{name}")}
+  end
+
+  def replicated_table_slices(table_name = nil)
+    if table_name
+      replicated_table_slices[table_name] ||= []
+    else
+      @replicated_table_slices ||= {}
+    end
+  end
+
   class Trigger
-    attr_reader :from, :to, :fields, :key, :through_table, :through_key, :condition, :prefix, :prefix_map
+    attr_reader :from, :to, :key, :through_table, :through_key, :condition, :prefix, :prefix_map
 
     def initialize(table, opts)
       @from       = table
@@ -68,6 +101,21 @@ module Replicate
       end
     end
 
+    def fields(opts = nil)
+      if opts
+        opts[:row] ||= 'ROW'
+        # Add the prefixes and return an array of arrays.
+        @fields.collect do |from_field, to_field|
+          from_field = Array(from_field).collect {|f| "#{opts[:row]}.#{f}"}.join(" || ' ' || ") 
+          to_field   = [opts[:prefix], to_field].compact.join('_')
+          [from_field, to_field]
+        end
+      else
+        # Just return the hash.
+        @fields
+      end
+    end
+
     def create_sql
       %{
         CREATE OR REPLACE FUNCTION #{name}() RETURNS TRIGGER AS $$
@@ -100,43 +148,47 @@ module Replicate
       }
     end
 
-    def initialize_sql
-      if timestamps?
-        "INSERT INTO #{to} (id, created_at) SELECT #{key}, NOW() FROM #{from};"
-      else
-        "INSERT INTO #{to} (id) SELECT #{key} FROM #{from};"
-      end
-    end
-
-    def populate_sql(mode = nil)
-      sql = []
+    def initialize_sql(mode = nil)
+      sql_by_slice = {}
       
       if through?
-        tables     = "#{from}, #{through_table}"        
-        conditions = "#{from}.id = #{through_table}.#{through_key} AND #{through_table}.#{key} = #{to}.id"
+        tables = "#{from}, #{through_table}"
+        join   = "#{from}.id = #{through_table}.#{through_key}"
       else
-        tables     = from
-        conditions = "#{to}.id = #{from}.#{key}"
+        tables = from
       end
 
       if prefix_map
         prefix_map.each do |prefix_value, mapping|
-          sql << %{
-            UPDATE #{to}
-              #{update_sql(:prefix => mapping, :all => true)}
-              FROM #{tables}
-              WHERE #{conditions} AND #{prefix_field(:all)} = '#{prefix_value}';
+          slice_fields = []
+          field_sql = fields(:prefix => mapping, :row => from).collect do |from_field, to_field|
+            slice_fields << to_field
+            "#{from_field} AS #{to_field}"
+          end.join(', ')
+          where_sql  = "WHERE " << [join, "#{prefix_field(true)} = '#{prefix_value}'"].compact.join(' AND ')
+          table_name = "#{name}_#{mapping}"
+          
+          slice = {:name => table_name, :fields => slice_fields}
+          sql_by_slice[slice] = %{
+            CREATE TABLE #{table_name} AS
+              SELECT #{primary_key(true)} AS id, #{field_sql} FROM #{tables} #{where_sql}
           }
         end
       else
-        sql << %{
-          UPDATE #{to}
-            #{update_sql(:prefix => prefix, :all => true)}
-            FROM #{tables}
-            WHERE #{conditions};
+        slice_fields = []
+        field_sql = fields(:row => from).collect do |from_field, to_field|
+          slice_fields << to_field
+          "#{from_field} AS #{to_field}"
+        end.join(', ')
+        where_sql  = "WHERE #{join}" if join
+        
+        slice = {:name => name, :fields => slice_fields}
+        sql_by_slice[slice] = %{
+          CREATE TABLE #{name} AS
+            SELECT #{primary_key(true)} AS id, #{field_sql} FROM #{tables} #{where_sql}
         }
       end
-      sql
+      sql_by_slice
     end
 
     def drop_sql
@@ -157,16 +209,20 @@ module Replicate
 
   private
 
-    def prefix_field(flag = nil)
-      if flag == :all
+    def prefix_field(initialize = false)
+      if initialize
         "#{prefix_through? ? through_table : from}.#{prefix}"
       else
         "#{prefix_through? ? 'THROUGH' : 'ROW'}.#{prefix}"
       end
     end
 
-    def primary_key
-      @primary_key ||= "#{through? ? 'THROUGH' : 'ROW'}.#{key}"
+    def primary_key(initialize = false)
+      if initialize
+        "#{through? ? through_table : from}.#{key}"
+      else
+        @primary_key ||= "#{through? ? 'THROUGH' : 'ROW'}.#{key}"
+      end
     end      
     
     def name
@@ -202,19 +258,13 @@ module Replicate
     end
       
     def update_sql(opts = {})
-      updates = fields.collect do |from_field, to_field|
-        if opts[:clear]
-          from_field = 'NULL'
-        else
-          from = opts[:all] ? self.from : 'ROW'
-          from_field = Array(from_field).collect {|f| "#{from}.#{f}"}.join(" || ' ' || ") 
-        end
-        field = [opts[:prefix], to_field].compact.join('_')
-        "#{field} = #{from_field}"
+      updates = fields(:prefix => opts[:prefix]).collect do |from_field, to_field|
+        from_field = 'NULL' if opts[:clear]
+        "#{to_field} = #{from_field}"
       end
       updates << "updated_at = NOW()" if timestamps?
       sql = "SET #{updates.join(', ')}"
-      sql = "UPDATE #{to} #{sql} WHERE #{to}.id = #{primary_key};" unless opts[:all]
+      sql = "UPDATE #{to} #{sql} WHERE #{to}.id = #{primary_key};"
       sql
     end
 
