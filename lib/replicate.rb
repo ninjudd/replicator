@@ -21,27 +21,26 @@ module Replicate
   end
 
   def create_replicated_table(table_name)
-    fields     = []
-    tables     = []
-    conditions = []
+    table  = nil
+    fields = []
+    joins  = []
 
     replicated_table_slices(table_name).each do |slice|
-      if tables.empty?
-        fields << "#{slice[:name]}.id"
+      if table
+        joins << "LEFT OUTER JOIN #{slice[:name]} ON #{table}.id = #{slice[:name]}.id"
       else
-        conditions << "#{tables.first}.id = #{slice[:name]}.id"
+        table = slice[:name]
+        fields << "#{table}.id"
       end
       fields << slice[:fields].collect {|f| "#{slice[:name]}.#{f}"}
-      tables << slice[:name]
     end
 
     execute %{
       CREATE TABLE #{table_name} AS
-        SELECT #{fields.flatten.join(', ')} FROM #{tables.join(', ')}
-         WHERE #{conditions.join(' AND ')}
+        SELECT #{fields.flatten.join(', ')}
+          FROM #{table}
+          #{joins.join(' ')}
     }
-
-    tables.each {|name| execute("DROP TABLE #{name}")}
   end
 
   def replicated_table_slices(table_name = nil)
