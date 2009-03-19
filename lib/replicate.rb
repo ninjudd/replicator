@@ -45,7 +45,7 @@ module Replicate
 
   def replicated_table_slices(table_name = nil)
     if table_name
-      replicated_table_slices[table_name] ||= []
+      replicated_table_slices[table_name.to_sym] ||= []
     else
       @replicated_table_slices ||= {}
     end
