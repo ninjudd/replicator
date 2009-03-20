@@ -63,6 +63,7 @@ module Replicate
       @prefix     = opts[:prefix]
       @prefix_map = opts[:prefix_map]
       @timestamps = opts[:timestamps]
+      @dependent  = opts[:dependent]
 
       if opts[:through]
         @through_table, @through_key = opts[:through].split('.')
@@ -129,12 +130,12 @@ module Replicate
             END IF;
             #{loop_sql}
               IF #{conditions_sql} THEN
-                IF COUNT(*) = 0 FROM #{to} WHERE id = #{primary_key} THEN
-                  #{insert_sql}
-                END IF;
                 IF (TG_OP = 'DELETE') THEN
-                  #{update_all_sql(:indent => 18, :clear => true)}
+                  #{ dependent_destroy? ? destroy_sql : update_all_sql(:indent => 18, :clear => true)}
                 ELSE
+                  IF COUNT(*) = 0 FROM #{to} WHERE id = #{primary_key} THEN
+                    #{insert_sql}
+                  END IF;
                   #{update_all_sql(:indent => 18)}
                 END IF;
               END IF;
@@ -145,6 +146,10 @@ module Replicate
         CREATE TRIGGER #{name} AFTER INSERT OR UPDATE OR DELETE ON #{from}
           FOR EACH ROW EXECUTE PROCEDURE #{name}();
       }
+    end
+
+    def destroy_sql
+      "DELETE FROM #{to} WHERE id = #{primary_key};"
     end
 
     def initialize_sql(mode = nil)
@@ -196,6 +201,10 @@ module Replicate
 
     def timestamps?
       @timestamps
+    end
+
+    def dependent_destroy?
+      @dependent == :destroy
     end
 
     def through?
