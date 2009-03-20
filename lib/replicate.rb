@@ -175,7 +175,7 @@ module Replicate
         end
       else
         slice_fields = []
-        field_sql = fields(:row => from).collect do |from_field, to_field|
+        field_sql = fields(:prefix => prefix, :row => from).collect do |from_field, to_field|
           slice_fields << to_field
           "#{from_field} AS #{to_field}"
         end.join(', ')
