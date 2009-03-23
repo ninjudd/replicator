@@ -131,7 +131,9 @@ module Replicate
             #{loop_sql}
               IF #{conditions_sql} THEN
                 IF (TG_OP = 'DELETE') THEN
-                  #{ dependent_destroy? ? destroy_sql : update_all_sql(:indent => 18, :clear => true)}
+                  IF COUNT(*) > 0 FROM #{to} WHERE id = #{primary_key} THEN
+                    #{ dependent_destroy? ? destroy_sql : update_all_sql(:indent => 18, :clear => true)}
+                  END IF;
                 ELSE
                   IF COUNT(*) = 0 FROM #{to} WHERE id = #{primary_key} THEN
                     #{insert_sql}
