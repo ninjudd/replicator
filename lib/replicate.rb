@@ -109,7 +109,7 @@ module Replicate
           if from_field.kind_of?(Array)
             from_field = from_field.collect {|f| "COALESCE(#{opts[:row]}.#{f}, '')"}.join(" || ' ' || ") 
           else
-            from_field "#{opts[:row]}.#{f}"
+            from_field "#{opts[:row]}.#{from_field}"
           end
           to_field = [opts[:prefix], to_field].compact.join('_')
           [from_field, to_field]
