@@ -52,7 +52,7 @@ module Replicate
   end
 
   class Trigger
-    attr_reader :from, :to, :key, :through_table, :through_key, :condition, :prefix, :prefix_map
+    attr_reader :from, :to, :key, :through_table, :through_key, :condition, :prefix, :prefix_map, :dependent
 
     def initialize(table, opts)
       @from       = table
@@ -131,9 +131,7 @@ module Replicate
             #{loop_sql}
               IF #{conditions_sql} THEN
                 IF (TG_OP = 'DELETE') THEN
-                  IF COUNT(*) > 0 FROM #{to} WHERE id = #{primary_key} THEN
-                    #{ dependent_destroy? ? destroy_sql : update_all_sql(:indent => 18, :clear => true)}
-                  END IF;
+                  #{delete_sql(:indent => 18)}
                 ELSE
                   IF COUNT(*) = 0 FROM #{to} WHERE id = #{primary_key} THEN
                     #{insert_sql}
@@ -148,10 +146,6 @@ module Replicate
         CREATE TRIGGER #{name} AFTER INSERT OR UPDATE OR DELETE ON #{from}
           FOR EACH ROW EXECUTE PROCEDURE #{name}();
       }
-    end
-
-    def destroy_sql
-      "DELETE FROM #{to} WHERE id = #{primary_key};"
     end
 
     def initialize_sql(mode = nil)
@@ -203,10 +197,6 @@ module Replicate
 
     def timestamps?
       @timestamps
-    end
-
-    def dependent_destroy?
-      @dependent == :destroy
     end
 
     def through?
@@ -292,6 +282,14 @@ module Replicate
       end
       sql << "END IF;"
       sql
+    end
+
+    def delete_sql(opts = {})
+      if dependent == :destroy
+        "DELETE FROM #{to} WHERE id = #{primary_key};"
+      elsif dependent == :nullify
+        update_all_sql(:indent => opts[:indent], :clear => true)
+      end
     end
   end
 end
