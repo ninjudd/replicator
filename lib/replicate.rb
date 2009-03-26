@@ -106,7 +106,7 @@ module Replicate
         opts[:row] ||= 'ROW'
         # Add the prefixes and return an array of arrays.
         @fields.collect do |from_field, to_field|
-          from_field = Array(from_field).collect {|f| "#{opts[:row]}.#{f}"}.join(" || ' ' || ") 
+          from_field = Array(from_field).collect {|f| "COALESCE(#{opts[:row]}.#{f}, '')"}.join(" || ' ' || ") 
           to_field   = [opts[:prefix], to_field].compact.join('_')
           [from_field, to_field]
         end
