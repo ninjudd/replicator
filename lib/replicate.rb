@@ -152,7 +152,7 @@ module Replicate
       }
     end
 
-    def initialize_sql(mode = nil)
+    def initialize_sql
       sql_by_slice = {}
       
       if through?
