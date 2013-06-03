@@ -1,27 +1,24 @@
-Gem::Specification.new do |s|
-  s.name = %q{replicate}
-  s.version = "0.1.0"
+lib = File.expand_path('../lib', __FILE__)
+$LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 
-  s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
-  s.authors = ["Justin Balthrop"]
-  s.date = %q{2009-04-16}
-  s.description = %q{Simple Postgres replication for Rails}
-  s.email = %q{code@justinbalthrop.com}
-  s.files = ["README.rdoc", "VERSION.yml", "lib/replicate.rb", "test/replicate_test.rb", "test/test_helper.rb"]
-  s.has_rdoc = true
-  s.homepage = %q{http://github.com/ninjudd/replicate}
-  s.rdoc_options = ["--inline-source", "--charset=UTF-8"]
-  s.require_paths = ["lib"]
-  s.rubygems_version = %q{1.2.0}
-  s.summary = %q{Simple Postgres replication for Rails. Replicates specific columns from one table to another using auto-generated triggers.}
+Gem::Specification.new do |gem|
+  gem.name          = "replicator"
+  gem.version       = IO.read('VERSION')
+  gem.authors       = ["Justin Balthrop"]
+  gem.email         = ["git@justinbalthrop.com"]
+  gem.description   = %q{Easy Postgres replication for Rails}
+  gem.summary       = gem.description
+  gem.homepage      = "https://github.com/ninjudd/replicator"
 
-  if s.respond_to? :specification_version then
-    current_version = Gem::Specification::CURRENT_SPECIFICATION_VERSION
-    s.specification_version = 2
+  gem.add_development_dependency 'shoulda', '3.0.1'
+  gem.add_development_dependency 'mocha'
+  gem.add_development_dependency 'rake'
+  gem.add_development_dependency 'activerecord-postgresql-adapter'
 
-    if current_version >= 3 then
-    else
-    end
-  else
-  end
+  gem.add_dependency 'activerecord',  '~> 2.3.9'
+
+  gem.files         = `git ls-files`.split($/)
+  gem.executables   = gem.files.grep(%r{^bin/}).map{ |f| File.basename(f) }
+  gem.test_files    = gem.files.grep(%r{^(test|spec|features)/})
+  gem.require_paths = ["lib"]
 end
