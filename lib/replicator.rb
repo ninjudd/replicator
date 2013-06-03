@@ -1,4 +1,4 @@
-module Replicate
+module Replicator
   def replicate(table, opts)
     action = opts.delete(:action) || :create
     trigger = Trigger.new(table, opts)

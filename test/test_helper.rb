@@ -1,10 +1,6 @@
 require 'rubygems'
 require 'test/unit'
 require 'shoulda'
-require 'mocha'
+require 'mocha/setup'
 
-$LOAD_PATH.unshift(File.dirname(__FILE__) + '/../lib')
-require 'replicate'
-
-class Test::Unit::TestCase
-end
+require 'replicator'
